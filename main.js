@@ -5,6 +5,7 @@ const taskForm = document.getElementById("taskForm");
 const tasksContainer = document.getElementById("tasksContainer");
 const searchInput = document.getElementById("searchInput");
 const addNewTaskBtn = document.getElementById("addNewTaskBtn");
+const fabAddTaskBtn = document.getElementById("fabAddTaskBtn");
 
 // Filter & Sort Controls
 const statusFilter = document.getElementById("statusFilter");
@@ -32,6 +33,10 @@ const themeIcon = document.getElementById("themeIcon");
 let tasks = JSON.parse(localStorage.getItem("tasksList")) || [];
 let taskToDeleteIndex = null;
 let editTaskIndex = null;
+
+// Chart Instances
+let statusChartInstance = null;
+let priorityChartInstance = null;
 
 // ==========================================
 // 2. Theme Management
@@ -73,9 +78,7 @@ clearCompletedBtn.addEventListener("click", () => {
     saveAndRender();
 });
 
-// دالة تهيئة المودال لوضع الإضافة
-const fabAddTaskBtn = document.getElementById("fabAddTaskBtn");
-
+// Reset Modal for "Add Task"
 function openAddModal() {
     editTaskIndex = null;
     document.getElementById("taskModalLabel").textContent = "Add New Task";
@@ -90,6 +93,7 @@ taskModalEl.addEventListener("hidden.bs.modal", () => {
     taskForm.reset();
     editTaskIndex = null;
 });
+
 // ==========================================
 // 4. Form Submit (Add or Edit Task)
 // ==========================================
@@ -166,7 +170,7 @@ document.getElementById("confirmDeleteBtn").addEventListener("click", function (
 });
 
 // ==========================================
-// 6. UI Helpers, Counters & Rendering
+// 6. UI Helpers, Charts & Rendering
 // ==========================================
 function escapeHTML(str) {
     return String(str)
@@ -187,8 +191,60 @@ function updateCounters() {
     pendingCountEl.textContent = pending;
 }
 
+function renderCharts() {
+    const statusCanvas = document.getElementById('statusChart');
+    const priorityCanvas = document.getElementById('priorityChart');
+    if (!statusCanvas || !priorityCanvas) return;
+
+    const ctxStatus = statusCanvas.getContext('2d');
+    const ctxPriority = priorityCanvas.getContext('2d');
+
+    const completedCount = tasks.filter(t => t.completed).length;
+    const pendingCount = tasks.length - completedCount;
+
+    const highCount = tasks.filter(t => t.priority === 'High').length;
+    const medCount = tasks.filter(t => t.priority === 'Medium').length;
+    const lowCount = tasks.filter(t => t.priority === 'Low').length;
+
+    if (statusChartInstance) statusChartInstance.destroy();
+    if (priorityChartInstance) priorityChartInstance.destroy();
+
+    // Chart 1: Status (Doughnut)
+    statusChartInstance = new Chart(ctxStatus, {
+        type: 'doughnut',
+        data: {
+            labels: ['Completed', 'Pending'],
+            datasets: [{
+                data: [completedCount, pendingCount],
+                backgroundColor: ['#198754', '#ffc107']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // Chart 2: Priority (Bar)
+    priorityChartInstance = new Chart(ctxPriority, {
+        type: 'bar',
+        data: {
+            labels: ['High', 'Medium', 'Low'],
+            datasets: [{
+                label: 'Tasks',
+                data: [highCount, medCount, lowCount],
+                backgroundColor: ['#dc3545', '#fd7e14', '#0dcaf0']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+    });
+}
+
 function displayTasks() {
     updateCounters();
+    renderCharts();
     tasksContainer.innerHTML = "";
 
     const query = searchInput.value.toLowerCase().trim();
@@ -196,10 +252,8 @@ function displayTasks() {
     const priorityVal = priorityFilter.value;
     const sortVal = sortSelect.value;
 
-    // Preserve original indexes
     let filteredTasks = tasks.map((task, originalIndex) => ({ ...task, originalIndex }));
 
-    // 1. Search Filter
     if (query) {
         filteredTasks = filteredTasks.filter(t =>
             t.name.toLowerCase().includes(query) ||
@@ -207,14 +261,11 @@ function displayTasks() {
         );
     }
 
-    // 2. Status Filter
     if (statusVal === "active") filteredTasks = filteredTasks.filter(t => !t.completed);
     if (statusVal === "completed") filteredTasks = filteredTasks.filter(t => t.completed);
 
-    // 3. Priority Filter
     if (priorityVal !== "All") filteredTasks = filteredTasks.filter(t => t.priority === priorityVal);
 
-    // 4. Sorting
     if (sortVal === "dueDate") {
         filteredTasks.sort((a, b) => {
             if (!a.dueDate) return 1;
@@ -225,17 +276,14 @@ function displayTasks() {
         const priorityRank = { High: 1, Medium: 2, Low: 3 };
         filteredTasks.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
     } else {
-        // Newest First (default)
         filteredTasks.reverse();
     }
 
-    // Case 1: No tasks overall
     if (tasks.length === 0) {
         tasksContainer.innerHTML = `<p class="text-center text-body fs-3 fw-bolder my-4">There are no tasks</p>`;
         return;
     }
 
-    // Case 2: No search/filter match
     if (filteredTasks.length === 0) {
         tasksContainer.innerHTML = `<p class="text-center text-body-secondary fs-4 my-4">No matching tasks found</p>`;
         return;
@@ -266,7 +314,6 @@ function displayTasks() {
         const titleStyle = isDone ? "text-decoration-line-through text-body-secondary opacity-75" : "text-body";
         const descStyle = isDone ? "text-decoration-line-through text-body-tertiary opacity-75" : "text-body-secondary";
 
-        // Due Date Badge Logic
         let dueDateBadge = "";
         if (task.dueDate) {
             const isOverdue = !isDone && task.dueDate < todayStr;
@@ -285,7 +332,6 @@ function displayTasks() {
                     <div class="card-body p-3 d-flex flex-column justify-content-between">
 
                         <div>
-                            <!-- Header: Checkbox, Title, Date & Priority -->
                             <div class="d-flex justify-content-between align-items-start mb-2 gap-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <input 
@@ -307,13 +353,11 @@ function displayTasks() {
                                 </div>
                             </div>
 
-                            <!-- Description -->
                             <p class="card-text ${descStyle} small mb-3 text-break ms-4">
                                 ${safeDesc}
                             </p>
                         </div>
 
-                        <!-- Actions -->
                         <div class="d-flex justify-content-end align-items-center gap-2 pt-2 border-top border-secondary-subtle">
                             <button onclick="editTask(${task.originalIndex})" class="btn btn-sm btn-outline-primary border-0 rounded-2 d-inline-flex align-items-center gap-1">
                                 <i class="bi bi-pencil-square"></i>
