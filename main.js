@@ -1,33 +1,36 @@
 // ==========================================
 // 1. DOM Elements & State Variables
 // ==========================================
+// Common Elements
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const themeIcon = document.getElementById("themeIcon");
+
+// Tasks Page Elements
 const taskForm = document.getElementById("taskForm");
 const tasksContainer = document.getElementById("tasksContainer");
 const searchInput = document.getElementById("searchInput");
-const addNewTaskBtn = document.getElementById("addNewTaskBtn");
 const fabAddTaskBtn = document.getElementById("fabAddTaskBtn");
 
-// Filter & Sort Controls
+// Tasks Filters & Sort Controls
 const statusFilter = document.getElementById("statusFilter");
 const priorityFilter = document.getElementById("priorityFilter");
 const sortSelect = document.getElementById("sortSelect");
 const clearCompletedBtn = document.getElementById("clearCompletedBtn");
 
-// Counter Elements
+// Dashboard Elements & Filters
 const totalCountEl = document.getElementById("totalCount");
 const completedCountEl = document.getElementById("completedCount");
 const pendingCountEl = document.getElementById("pendingCount");
+const dashPriorityFilter = document.getElementById("dashPriorityFilter");
+const dashDateFilter = document.getElementById("dashDateFilter");
+const resetDashFiltersBtn = document.getElementById("resetDashFiltersBtn");
 
 // Modals
 const taskModalEl = document.getElementById("taskModal");
-const taskModal = new bootstrap.Modal(taskModalEl);
+const taskModal = taskModalEl ? new bootstrap.Modal(taskModalEl) : null;
 
 const deleteModalEl = document.getElementById("deleteModal");
-const deleteModal = bootstrap.Modal.getOrCreateInstance(deleteModalEl);
-
-// Theme Toggle
-const themeToggleBtn = document.getElementById("themeToggleBtn");
-const themeIcon = document.getElementById("themeIcon");
+const deleteModal = deleteModalEl ? bootstrap.Modal.getOrCreateInstance(deleteModalEl) : null;
 
 // Global State
 let tasks = JSON.parse(localStorage.getItem("tasksList")) || [];
@@ -35,101 +38,108 @@ let taskToDeleteIndex = null;
 let editTaskIndex = null;
 
 // Chart Instances
+// Chart Instances
 let statusChartInstance = null;
 let priorityChartInstance = null;
+let timelineChartInstance = null;
+let progressMatrixChartInstance = null;
 
 // ==========================================
-// 2. Theme Management
+// 2. Theme Management (Light / Dark Mode)
 // ==========================================
 const savedTheme = localStorage.getItem("appTheme") || "dark";
 applyTheme(savedTheme);
 
-themeToggleBtn.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute("data-bs-theme") || "dark";
-    const newTheme = currentTheme === "dark" ? "light" : "dark";
-    applyTheme(newTheme);
-});
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+        const currentTheme = document.documentElement.getAttribute("data-bs-theme") || "dark";
+        const newTheme = currentTheme === "dark" ? "light" : "dark";
+        applyTheme(newTheme);
+    });
+}
 
 function applyTheme(theme) {
     document.documentElement.setAttribute("data-bs-theme", theme);
     localStorage.setItem("appTheme", theme);
 
-    if (theme === "dark") {
-        themeIcon.className = "bi bi-moon-stars-fill";
-    } else {
-        themeIcon.className = "bi bi-sun-fill text-warning";
+    if (themeIcon) {
+        themeIcon.className = theme === "dark" ? "bi bi-moon-stars-fill" : "bi bi-sun-fill text-warning";
     }
 }
 
 // ==========================================
 // 3. Initial Setup & Event Listeners
 // ==========================================
-displayTasks();
+renderPage();
 
-// Search & Filter Listeners
-searchInput.addEventListener("input", displayTasks);
-statusFilter.addEventListener("change", displayTasks);
-priorityFilter.addEventListener("change", displayTasks);
-sortSelect.addEventListener("change", displayTasks);
+// Tasks Page Listeners
+if (searchInput) searchInput.addEventListener("input", renderPage);
+if (statusFilter) statusFilter.addEventListener("change", renderPage);
+if (priorityFilter) priorityFilter.addEventListener("change", renderPage);
+if (sortSelect) sortSelect.addEventListener("change", renderPage);
 
-// Clear Completed Tasks
-clearCompletedBtn.addEventListener("click", () => {
-    tasks = tasks.filter(t => !t.completed);
-    saveAndRender();
-});
+if (clearCompletedBtn) {
+    clearCompletedBtn.addEventListener("click", () => {
+        tasks = tasks.filter(t => !t.completed);
+        saveAndRender();
+    });
+}
 
-// Reset Modal for "Add Task"
+// Dashboard Page Listeners
+if (dashPriorityFilter) dashPriorityFilter.addEventListener("change", renderPage);
+if (dashDateFilter) dashDateFilter.addEventListener("change", renderPage);
+
+if (resetDashFiltersBtn) {
+    resetDashFiltersBtn.addEventListener("click", () => {
+        if (dashPriorityFilter) dashPriorityFilter.value = "All";
+        if (dashDateFilter) dashDateFilter.value = "all";
+        renderPage();
+    });
+}
+
+// FAB & Modal Listeners
 function openAddModal() {
     editTaskIndex = null;
     document.getElementById("taskModalLabel").textContent = "Add New Task";
     document.getElementById("submitTaskBtn").textContent = "Save Task";
-    taskForm.reset();
+    if (taskForm) taskForm.reset();
 }
 
-if (addNewTaskBtn) addNewTaskBtn.addEventListener("click", openAddModal);
 if (fabAddTaskBtn) fabAddTaskBtn.addEventListener("click", openAddModal);
 
-taskModalEl.addEventListener("hidden.bs.modal", () => {
-    taskForm.reset();
-    editTaskIndex = null;
-});
-
-// ==========================================
-// 4. Form Submit (Add or Edit Task)
-// ==========================================
-taskForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    let title = document.getElementById("titleInput").value.trim();
-    let priority = document.getElementById("priorityInput").value;
-    let dueDate = document.getElementById("dueDateInput").value;
-    let description = document.getElementById("disInput").value.trim() || "There is no description";
-
-    if (!title) return;
-
-    if (editTaskIndex === null) {
-        tasks.push({
-            name: title,
-            priority: priority,
-            dueDate: dueDate,
-            description: description,
-            completed: false
-        });
-    } else {
-        tasks[editTaskIndex] = {
-            ...tasks[editTaskIndex],
-            name: title,
-            priority: priority,
-            dueDate: dueDate,
-            description: description
-        };
+if (taskModalEl) {
+    taskModalEl.addEventListener("hidden.bs.modal", () => {
+        if (taskForm) taskForm.reset();
         editTaskIndex = null;
-    }
+    });
+}
 
-    saveAndRender();
-    taskForm.reset();
-    taskModal.hide();
-});
+// ==========================================
+// 4. Form Submit & Edit Logic
+// ==========================================
+if (taskForm) {
+    taskForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        let title = document.getElementById("titleInput").value.trim();
+        let priority = document.getElementById("priorityInput").value;
+        let dueDate = document.getElementById("dueDateInput").value;
+        let description = document.getElementById("disInput").value.trim() || "There is no description";
+
+        if (!title) return;
+
+        if (editTaskIndex === null) {
+            tasks.push({ name: title, priority: priority, dueDate: dueDate, description: description, completed: false });
+        } else {
+            tasks[editTaskIndex] = { ...tasks[editTaskIndex], name: title, priority: priority, dueDate: dueDate, description: description };
+            editTaskIndex = null;
+        }
+
+        saveAndRender();
+        taskForm.reset();
+        if (taskModal) taskModal.hide();
+    });
+}
 
 function editTask(index) {
     editTaskIndex = index;
@@ -143,11 +153,11 @@ function editTask(index) {
     document.getElementById("taskModalLabel").textContent = "Edit Task";
     document.getElementById("submitTaskBtn").textContent = "Save Changes";
 
-    taskModal.show();
+    if (taskModal) taskModal.show();
 }
 
 // ==========================================
-// 5. Completion & Delete Handlers
+// 5. Completion & Delete Logic
 // ==========================================
 function toggleTaskStatus(index) {
     tasks[index].completed = !tasks[index].completed;
@@ -156,21 +166,23 @@ function toggleTaskStatus(index) {
 
 function deleteTask(index) {
     taskToDeleteIndex = index;
-    deleteModal.show();
+    if (deleteModal) deleteModal.show();
 }
 
-document.getElementById("confirmDeleteBtn").addEventListener("click", function () {
-    if (taskToDeleteIndex !== null) {
-        tasks.splice(taskToDeleteIndex, 1);
-        saveAndRender();
-
-        deleteModal.hide();
-        taskToDeleteIndex = null;
-    }
-});
+const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
+if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener("click", function () {
+        if (taskToDeleteIndex !== null) {
+            tasks.splice(taskToDeleteIndex, 1);
+            saveAndRender();
+            if (deleteModal) deleteModal.hide();
+            taskToDeleteIndex = null;
+        }
+    });
+}
 
 // ==========================================
-// 6. UI Helpers, Charts & Rendering
+// 6. Helpers, Dashboard Analytics & Rendering
 // ==========================================
 function escapeHTML(str) {
     return String(str)
@@ -181,9 +193,32 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
+function getFilteredDashboardTasks() {
+    let list = [...tasks];
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // Priority Filter
+    if (dashPriorityFilter && dashPriorityFilter.value !== "All") {
+        list = list.filter(t => t.priority === dashPriorityFilter.value);
+    }
+
+    // Timeframe Filter
+    if (dashDateFilter) {
+        if (dashDateFilter.value === "overdue") {
+            list = list.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
+        } else if (dashDateFilter.value === "today") {
+            list = list.filter(t => t.dueDate === todayStr);
+        }
+    }
+
+    return list;
+}
+
 function updateCounters() {
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.completed).length;
+    if (!totalCountEl) return;
+    const filteredList = getFilteredDashboardTasks();
+    const total = filteredList.length;
+    const completed = filteredList.filter(t => t.completed).length;
     const pending = total - completed;
 
     totalCountEl.textContent = total;
@@ -194,23 +229,25 @@ function updateCounters() {
 function renderCharts() {
     const statusCanvas = document.getElementById('statusChart');
     const priorityCanvas = document.getElementById('priorityChart');
-    if (!statusCanvas || !priorityCanvas) return;
+    const timelineCanvas = document.getElementById('timelineChart');
+    const matrixCanvas = document.getElementById('progressMatrixChart');
 
-    const ctxStatus = statusCanvas.getContext('2d');
-    const ctxPriority = priorityCanvas.getContext('2d');
+    if (!statusCanvas || !priorityCanvas || !timelineCanvas || !matrixCanvas) return;
 
-    const completedCount = tasks.filter(t => t.completed).length;
-    const pendingCount = tasks.length - completedCount;
+    const filteredList = getFilteredDashboardTasks();
+    const todayStr = new Date().toISOString().split("T")[0];
 
-    const highCount = tasks.filter(t => t.priority === 'High').length;
-    const medCount = tasks.filter(t => t.priority === 'Medium').length;
-    const lowCount = tasks.filter(t => t.priority === 'Low').length;
-
+    // Destroy old instances
     if (statusChartInstance) statusChartInstance.destroy();
     if (priorityChartInstance) priorityChartInstance.destroy();
+    if (timelineChartInstance) timelineChartInstance.destroy();
+    if (progressMatrixChartInstance) progressMatrixChartInstance.destroy();
 
-    // Chart 1: Status (Doughnut)
-    statusChartInstance = new Chart(ctxStatus, {
+    // --- Chart 1: Status (Doughnut) ---
+    const completedCount = filteredList.filter(t => t.completed).length;
+    const pendingCount = filteredList.length - completedCount;
+
+    statusChartInstance = new Chart(statusCanvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['Completed', 'Pending'],
@@ -222,8 +259,12 @@ function renderCharts() {
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // Chart 2: Priority (Bar)
-    priorityChartInstance = new Chart(ctxPriority, {
+    // --- Chart 2: Priority (Bar) ---
+    const highCount = filteredList.filter(t => t.priority === 'High').length;
+    const medCount = filteredList.filter(t => t.priority === 'Medium').length;
+    const lowCount = filteredList.filter(t => t.priority === 'Low').length;
+
+    priorityChartInstance = new Chart(priorityCanvas.getContext('2d'), {
         type: 'bar',
         data: {
             labels: ['High', 'Medium', 'Low'],
@@ -240,25 +281,72 @@ function renderCharts() {
             scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
         }
     });
+
+    // --- Chart 3: Timeline Health (Pie Chart) ---
+    const overdueCount = filteredList.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr).length;
+    const todayCount = filteredList.filter(t => t.dueDate === todayStr).length;
+    const upcomingCount = filteredList.filter(t => t.dueDate && t.dueDate > todayStr).length;
+    const noDateCount = filteredList.filter(t => !t.dueDate).length;
+
+    timelineChartInstance = new Chart(timelineCanvas.getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: ['Overdue', 'Due Today', 'Upcoming', 'No Due Date'],
+            datasets: [{
+                data: [overdueCount, todayCount, upcomingCount, noDateCount],
+                backgroundColor: ['#dc3545', '#0d6efd', '#20c997', '#6c757d']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // --- Chart 4: Priority Progress (Stacked Bar Chart) ---
+    const highDone = filteredList.filter(t => t.priority === 'High' && t.completed).length;
+    const medDone = filteredList.filter(t => t.priority === 'Medium' && t.completed).length;
+    const lowDone = filteredList.filter(t => t.priority === 'Low' && t.completed).length;
+
+    progressMatrixChartInstance = new Chart(matrixCanvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: ['High', 'Medium', 'Low'],
+            datasets: [
+                {
+                    label: 'Completed',
+                    data: [highDone, medDone, lowDone],
+                    backgroundColor: '#198754'
+                },
+                {
+                    label: 'Pending',
+                    data: [highCount - highDone, medCount - medDone, lowCount - lowDone],
+                    backgroundColor: '#6c757d'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
 }
 
 function displayTasks() {
-    updateCounters();
-    renderCharts();
+    if (!tasksContainer) return;
     tasksContainer.innerHTML = "";
 
-    const query = searchInput.value.toLowerCase().trim();
-    const statusVal = statusFilter.value;
-    const priorityVal = priorityFilter.value;
-    const sortVal = sortSelect.value;
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+    const statusVal = statusFilter ? statusFilter.value : "all";
+    const priorityVal = priorityFilter ? priorityFilter.value : "All";
+    const sortVal = sortSelect ? sortSelect.value : "newest";
 
     let filteredTasks = tasks.map((task, originalIndex) => ({ ...task, originalIndex }));
 
     if (query) {
-        filteredTasks = filteredTasks.filter(t =>
-            t.name.toLowerCase().includes(query) ||
-            t.description.toLowerCase().includes(query)
-        );
+        filteredTasks = filteredTasks.filter(t => t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query));
     }
 
     if (statusVal === "active") filteredTasks = filteredTasks.filter(t => !t.completed);
@@ -267,11 +355,7 @@ function displayTasks() {
     if (priorityVal !== "All") filteredTasks = filteredTasks.filter(t => t.priority === priorityVal);
 
     if (sortVal === "dueDate") {
-        filteredTasks.sort((a, b) => {
-            if (!a.dueDate) return 1;
-            if (!b.dueDate) return -1;
-            return new Date(a.dueDate) - new Date(b.dueDate);
-        });
+        filteredTasks.sort((a, b) => (!a.dueDate ? 1 : !b.dueDate ? -1 : new Date(a.dueDate) - new Date(b.dueDate)));
     } else if (sortVal === "priority") {
         const priorityRank = { High: 1, Medium: 2, Low: 3 };
         filteredTasks.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
@@ -378,7 +462,13 @@ function displayTasks() {
     tasksContainer.innerHTML = cardsHTML;
 }
 
+function renderPage() {
+    updateCounters();
+    renderCharts();
+    displayTasks();
+}
+
 function saveAndRender() {
     localStorage.setItem("tasksList", JSON.stringify(tasks));
-    displayTasks();
+    renderPage();
 }
