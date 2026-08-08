@@ -1,23 +1,64 @@
 // ==========================================
-// 1. DOM Elements & State Variables
+// 1. Authentication & Route Guard
 // ==========================================
-// Common Elements
+const currentPage = window.location.pathname.split("/").pop() || "index.html";
+const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+
+if (!isLoggedIn && currentPage !== "login.html") {
+    window.location.href = "login.html";
+} else if (isLoggedIn && currentPage === "login.html") {
+    window.location.href = "index.html";
+}
+
+// Login Handler
+const loginForm = document.getElementById("loginForm");
+if (loginForm) {
+    loginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value.trim();
+
+        if (email && password) {
+            localStorage.setItem("isLoggedIn", "true");
+            localStorage.setItem("userEmail", email);
+            window.location.href = "index.html";
+        }
+    });
+}
+
+// Logout Handler
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+        localStorage.removeItem("isLoggedIn");
+        window.location.href = "login.html";
+    });
+}
+
+// ==========================================
+// 2. DOM Elements & Global Variables
+// ==========================================
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const themeIcon = document.getElementById("themeIcon");
 
-// Tasks Page Elements
+// Tasks Elements
 const taskForm = document.getElementById("taskForm");
 const tasksContainer = document.getElementById("tasksContainer");
 const searchInput = document.getElementById("searchInput");
 const fabAddTaskBtn = document.getElementById("fabAddTaskBtn");
 
-// Tasks Filters & Sort Controls
+// Filters & Controls
 const statusFilter = document.getElementById("statusFilter");
 const priorityFilter = document.getElementById("priorityFilter");
 const sortSelect = document.getElementById("sortSelect");
 const clearCompletedBtn = document.getElementById("clearCompletedBtn");
 
-// Dashboard Elements & Filters
+// JSON Backup Elements
+const exportBtn = document.getElementById("exportBtn");
+const importBtn = document.getElementById("importBtn");
+const importFileInput = document.getElementById("importFileInput");
+
+// Dashboard Elements
 const totalCountEl = document.getElementById("totalCount");
 const completedCountEl = document.getElementById("completedCount");
 const pendingCountEl = document.getElementById("pendingCount");
@@ -32,20 +73,37 @@ const taskModal = taskModalEl ? new bootstrap.Modal(taskModalEl) : null;
 const deleteModalEl = document.getElementById("deleteModal");
 const deleteModal = deleteModalEl ? bootstrap.Modal.getOrCreateInstance(deleteModalEl) : null;
 
+const clearDoneModalEl = document.getElementById("clearDoneModal");
+const clearDoneModal = clearDoneModalEl ? bootstrap.Modal.getOrCreateInstance(clearDoneModalEl) : null;
+
 // Global State
 let tasks = JSON.parse(localStorage.getItem("tasksList")) || [];
 let taskToDeleteIndex = null;
 let editTaskIndex = null;
 
-// Chart Instances
-// Chart Instances
+// Charts
 let statusChartInstance = null;
 let priorityChartInstance = null;
 let timelineChartInstance = null;
 let progressMatrixChartInstance = null;
 
 // ==========================================
-// 2. Theme Management (Light / Dark Mode)
+// 3. Toast Notification Helper
+// ==========================================
+function showToast(message, type = "success") {
+    const toastEl = document.getElementById("appToast");
+    const toastMessage = document.getElementById("toastMessage");
+    if (!toastEl || !toastMessage) return;
+
+    toastMessage.textContent = message;
+    toastEl.className = `toast align-items-center text-white border-0 bg-${type}`;
+
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+}
+
+// ==========================================
+// 4. Theme Management
 // ==========================================
 const savedTheme = localStorage.getItem("appTheme") || "dark";
 applyTheme(savedTheme);
@@ -68,24 +126,78 @@ function applyTheme(theme) {
 }
 
 // ==========================================
-// 3. Initial Setup & Event Listeners
+// 5. Initial Setup & Event Listeners
 // ==========================================
 renderPage();
 
-// Tasks Page Listeners
+// Tasks Listeners
 if (searchInput) searchInput.addEventListener("input", renderPage);
 if (statusFilter) statusFilter.addEventListener("change", renderPage);
 if (priorityFilter) priorityFilter.addEventListener("change", renderPage);
 if (sortSelect) sortSelect.addEventListener("change", renderPage);
 
+// Clear Completed Confirmation Modal
 if (clearCompletedBtn) {
     clearCompletedBtn.addEventListener("click", () => {
-        tasks = tasks.filter(t => !t.completed);
-        saveAndRender();
+        const hasCompleted = tasks.some(t => t.completed);
+        if (!hasCompleted) {
+            showToast("No completed tasks to clear!", "warning");
+            return;
+        }
+        if (clearDoneModal) clearDoneModal.show();
     });
 }
 
-// Dashboard Page Listeners
+const confirmClearDoneBtn = document.getElementById("confirmClearDoneBtn");
+if (confirmClearDoneBtn) {
+    confirmClearDoneBtn.addEventListener("click", () => {
+        tasks = tasks.filter(t => !t.completed);
+        saveAndRender();
+        if (clearDoneModal) clearDoneModal.hide();
+        showToast("Completed tasks cleared!", "danger");
+    });
+}
+
+// JSON Backup / Restore Listeners
+if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tasks, null, 2));
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "tasks-backup.json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        showToast("Backup exported successfully!", "success");
+    });
+}
+
+if (importBtn && importFileInput) {
+    importBtn.addEventListener("click", () => importFileInput.click());
+    importFileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedTasks = JSON.parse(event.target.result);
+                if (Array.isArray(importedTasks)) {
+                    tasks = importedTasks;
+                    saveAndRender();
+                    showToast("Tasks imported successfully!", "success");
+                } else {
+                    showToast("Invalid file format!", "danger");
+                }
+            } catch (err) {
+                showToast("Failed to parse JSON file!", "danger");
+            }
+        };
+        reader.readAsText(file);
+    });
+}
+
+// Dashboard Filters
 if (dashPriorityFilter) dashPriorityFilter.addEventListener("change", renderPage);
 if (dashDateFilter) dashDateFilter.addEventListener("change", renderPage);
 
@@ -97,7 +209,7 @@ if (resetDashFiltersBtn) {
     });
 }
 
-// FAB & Modal Listeners
+// Add Modal Handler
 function openAddModal() {
     editTaskIndex = null;
     document.getElementById("taskModalLabel").textContent = "Add New Task";
@@ -115,7 +227,7 @@ if (taskModalEl) {
 }
 
 // ==========================================
-// 4. Form Submit & Edit Logic
+// 6. Form Submit & Edit Logic
 // ==========================================
 if (taskForm) {
     taskForm.addEventListener("submit", (e) => {
@@ -130,9 +242,11 @@ if (taskForm) {
 
         if (editTaskIndex === null) {
             tasks.push({ name: title, priority: priority, dueDate: dueDate, description: description, completed: false });
+            showToast("Task added successfully!", "success");
         } else {
             tasks[editTaskIndex] = { ...tasks[editTaskIndex], name: title, priority: priority, dueDate: dueDate, description: description };
             editTaskIndex = null;
+            showToast("Task updated successfully!", "primary");
         }
 
         saveAndRender();
@@ -157,11 +271,12 @@ function editTask(index) {
 }
 
 // ==========================================
-// 5. Completion & Delete Logic
+// 7. Status & Single Delete Logic
 // ==========================================
 function toggleTaskStatus(index) {
     tasks[index].completed = !tasks[index].completed;
     saveAndRender();
+    showToast(tasks[index].completed ? "Task marked as completed!" : "Task marked as active!", "info");
 }
 
 function deleteTask(index) {
@@ -177,12 +292,13 @@ if (confirmDeleteBtn) {
             saveAndRender();
             if (deleteModal) deleteModal.hide();
             taskToDeleteIndex = null;
+            showToast("Task deleted!", "danger");
         }
     });
 }
 
 // ==========================================
-// 6. Helpers, Dashboard Analytics & Rendering
+// 8. Analytics & Rendering Logic
 // ==========================================
 function escapeHTML(str) {
     return String(str)
@@ -197,12 +313,10 @@ function getFilteredDashboardTasks() {
     let list = [...tasks];
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // Priority Filter
     if (dashPriorityFilter && dashPriorityFilter.value !== "All") {
         list = list.filter(t => t.priority === dashPriorityFilter.value);
     }
 
-    // Timeframe Filter
     if (dashDateFilter) {
         if (dashDateFilter.value === "overdue") {
             list = list.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr);
@@ -237,52 +351,33 @@ function renderCharts() {
     const filteredList = getFilteredDashboardTasks();
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // Destroy old instances
     if (statusChartInstance) statusChartInstance.destroy();
     if (priorityChartInstance) priorityChartInstance.destroy();
     if (timelineChartInstance) timelineChartInstance.destroy();
     if (progressMatrixChartInstance) progressMatrixChartInstance.destroy();
 
-    // --- Chart 1: Status (Doughnut) ---
+    // Chart 1: Status
     const completedCount = filteredList.filter(t => t.completed).length;
     const pendingCount = filteredList.length - completedCount;
 
     statusChartInstance = new Chart(statusCanvas.getContext('2d'), {
         type: 'doughnut',
-        data: {
-            labels: ['Completed', 'Pending'],
-            datasets: [{
-                data: [completedCount, pendingCount],
-                backgroundColor: ['#198754', '#ffc107']
-            }]
-        },
+        data: { labels: ['Completed', 'Pending'], datasets: [{ data: [completedCount, pendingCount], backgroundColor: ['#198754', '#ffc107'] }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // --- Chart 2: Priority (Bar) ---
+    // Chart 2: Priority
     const highCount = filteredList.filter(t => t.priority === 'High').length;
     const medCount = filteredList.filter(t => t.priority === 'Medium').length;
     const lowCount = filteredList.filter(t => t.priority === 'Low').length;
 
     priorityChartInstance = new Chart(priorityCanvas.getContext('2d'), {
         type: 'bar',
-        data: {
-            labels: ['High', 'Medium', 'Low'],
-            datasets: [{
-                label: 'Tasks',
-                data: [highCount, medCount, lowCount],
-                backgroundColor: ['#dc3545', '#fd7e14', '#0dcaf0']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-        }
+        data: { labels: ['High', 'Medium', 'Low'], datasets: [{ label: 'Tasks', data: [highCount, medCount, lowCount], backgroundColor: ['#dc3545', '#fd7e14', '#0dcaf0'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
     });
 
-    // --- Chart 3: Timeline Health (Pie Chart) ---
+    // Chart 3: Timeline Health
     const overdueCount = filteredList.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr).length;
     const todayCount = filteredList.filter(t => t.dueDate === todayStr).length;
     const upcomingCount = filteredList.filter(t => t.dueDate && t.dueDate > todayStr).length;
@@ -290,17 +385,11 @@ function renderCharts() {
 
     timelineChartInstance = new Chart(timelineCanvas.getContext('2d'), {
         type: 'pie',
-        data: {
-            labels: ['Overdue', 'Due Today', 'Upcoming', 'No Due Date'],
-            datasets: [{
-                data: [overdueCount, todayCount, upcomingCount, noDateCount],
-                backgroundColor: ['#dc3545', '#0d6efd', '#20c997', '#6c757d']
-            }]
-        },
+        data: { labels: ['Overdue', 'Due Today', 'Upcoming', 'No Due Date'], datasets: [{ data: [overdueCount, todayCount, upcomingCount, noDateCount], backgroundColor: ['#dc3545', '#0d6efd', '#20c997', '#6c757d'] }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // --- Chart 4: Priority Progress (Stacked Bar Chart) ---
+    // Chart 4: Priority Progress
     const highDone = filteredList.filter(t => t.priority === 'High' && t.completed).length;
     const medDone = filteredList.filter(t => t.priority === 'Medium' && t.completed).length;
     const lowDone = filteredList.filter(t => t.priority === 'Low' && t.completed).length;
@@ -310,27 +399,11 @@ function renderCharts() {
         data: {
             labels: ['High', 'Medium', 'Low'],
             datasets: [
-                {
-                    label: 'Completed',
-                    data: [highDone, medDone, lowDone],
-                    backgroundColor: '#198754'
-                },
-                {
-                    label: 'Pending',
-                    data: [highCount - highDone, medCount - medDone, lowCount - lowDone],
-                    backgroundColor: '#6c757d'
-                }
+                { label: 'Completed', data: [highDone, medDone, lowDone], backgroundColor: '#198754' },
+                { label: 'Pending', data: [highCount - highDone, medCount - medDone, lowCount - lowDone], backgroundColor: '#6c757d' }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } },
-            scales: {
-                x: { stacked: true },
-                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
     });
 }
 
@@ -363,13 +436,26 @@ function displayTasks() {
         filteredTasks.reverse();
     }
 
+    // Empty State UI
     if (tasks.length === 0) {
-        tasksContainer.innerHTML = `<p class="text-center text-body fs-3 fw-bolder my-4">There are no tasks</p>`;
+        tasksContainer.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <i class="bi bi-folder2-open text-body-tertiary display-1 d-block mb-3"></i>
+                <h5 class="fw-bold">No Tasks Created Yet</h5>
+                <p class="text-body-secondary small mb-3">Click the plus button below to create your first task!</p>
+            </div>
+        `;
         return;
     }
 
     if (filteredTasks.length === 0) {
-        tasksContainer.innerHTML = `<p class="text-center text-body-secondary fs-4 my-4">No matching tasks found</p>`;
+        tasksContainer.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <i class="bi bi-funnel text-body-tertiary display-3 d-block mb-3"></i>
+                <h5 class="fw-bold">No Matching Tasks</h5>
+                <p class="text-body-secondary small">Try adjusting your filters or search keywords.</p>
+            </div>
+        `;
         return;
     }
 
