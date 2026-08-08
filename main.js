@@ -61,7 +61,7 @@ function applyTheme(theme) {
 // ==========================================
 displayTasks();
 
-// Event Listeners for Filters, Search & Sort
+// Search & Filter Listeners
 searchInput.addEventListener("input", displayTasks);
 statusFilter.addEventListener("change", displayTasks);
 priorityFilter.addEventListener("change", displayTasks);
@@ -73,21 +73,23 @@ clearCompletedBtn.addEventListener("click", () => {
     saveAndRender();
 });
 
-// Reset Modal for "Add Task"
-if (addNewTaskBtn) {
-    addNewTaskBtn.addEventListener("click", () => {
-        editTaskIndex = null;
-        document.getElementById("taskModalLabel").textContent = "Add New Task";
-        document.getElementById("submitTaskBtn").textContent = "Save Task";
-        taskForm.reset();
-    });
+// دالة تهيئة المودال لوضع الإضافة
+const fabAddTaskBtn = document.getElementById("fabAddTaskBtn");
+
+function openAddModal() {
+    editTaskIndex = null;
+    document.getElementById("taskModalLabel").textContent = "Add New Task";
+    document.getElementById("submitTaskBtn").textContent = "Save Task";
+    taskForm.reset();
 }
+
+if (addNewTaskBtn) addNewTaskBtn.addEventListener("click", openAddModal);
+if (fabAddTaskBtn) fabAddTaskBtn.addEventListener("click", openAddModal);
 
 taskModalEl.addEventListener("hidden.bs.modal", () => {
     taskForm.reset();
     editTaskIndex = null;
 });
-
 // ==========================================
 // 4. Form Submit (Add or Edit Task)
 // ==========================================
